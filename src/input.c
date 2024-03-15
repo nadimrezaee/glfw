@@ -1,5 +1,5 @@
 //========================================================================
-// GLFW 3.4 - www.glfw.org
+// GLFW 3.5 - www.glfw.org
 //------------------------------------------------------------------------
 // Copyright (c) 2002-2006 Marcus Geelnard
 // Copyright (c) 2006-2019 Camilla Löwy <elmindreda@glfw.org>
@@ -23,8 +23,6 @@
 // 3. This notice may not be removed or altered from any source
 //    distribution.
 //
-//========================================================================
-// Please use C89 style variable declarations in this file because VS 2010
 //========================================================================
 
 #include "internal.h"
@@ -350,20 +348,22 @@ void _glfwInputMouseClick(_GLFWwindow* window, int button, int action, int mods)
 {
     assert(window != NULL);
     assert(button >= 0);
-    assert(button <= GLFW_MOUSE_BUTTON_LAST);
     assert(action == GLFW_PRESS || action == GLFW_RELEASE);
     assert(mods == (mods & GLFW_MOD_MASK));
 
-    if (button < 0 || button > GLFW_MOUSE_BUTTON_LAST)
+    if (button < 0 || (!window->disableMouseButtonLimit && button > GLFW_MOUSE_BUTTON_LAST))
         return;
 
     if (!window->lockKeyMods)
         mods &= ~(GLFW_MOD_CAPS_LOCK | GLFW_MOD_NUM_LOCK);
 
-    if (action == GLFW_RELEASE && window->stickyMouseButtons)
-        window->mouseButtons[button] = _GLFW_STICK;
-    else
-        window->mouseButtons[button] = (char) action;
+    if (button <= GLFW_MOUSE_BUTTON_LAST)
+    {
+        if (action == GLFW_RELEASE && window->stickyMouseButtons)
+            window->mouseButtons[button] = _GLFW_STICK;
+        else
+            window->mouseButtons[button] = (char) action;
+    }
 
     if (window->callbacks.mouseButton)
         window->callbacks.mouseButton((GLFWwindow*) window, button, action, mods);
@@ -578,6 +578,8 @@ GLFWAPI int glfwGetInputMode(GLFWwindow* handle, int mode)
             return window->lockKeyMods;
         case GLFW_RAW_MOUSE_MOTION:
             return window->rawMouseMotion;
+        case GLFW_UNLIMITED_MOUSE_BUTTONS:
+            return window->disableMouseButtonLimit;
     }
 
     _glfwInputError(GLFW_INVALID_ENUM, "Invalid input mode 0x%08X", mode);
@@ -685,6 +687,12 @@ GLFWAPI void glfwSetInputMode(GLFWwindow* handle, int mode, int value)
             _glfw.platform.setRawMouseMotion(window, value);
             return;
         }
+
+        case GLFW_UNLIMITED_MOUSE_BUTTONS:
+        {
+            window->disableMouseButtonLimit = value ? GLFW_TRUE : GLFW_FALSE;
+            return;
+        }
     }
 
     _glfwInputError(GLFW_INVALID_ENUM, "Invalid input mode 0x%08X", mode);
@@ -723,7 +731,7 @@ GLFWAPI const char* glfwGetKeyName(int key, int scancode)
 
 GLFWAPI int glfwGetKeyScancode(int key)
 {
-    _GLFW_REQUIRE_INIT_OR_RETURN(-1);
+    _GLFW_REQUIRE_INIT_OR_RETURN(0);
 
     if (key < GLFW_KEY_SPACE || key > GLFW_KEY_LAST)
     {
@@ -1440,7 +1448,7 @@ GLFWAPI int glfwGetGamepadState(int jid, GLFWgamepadstate* state)
         if (e->type == _GLFW_JOYSTICK_AXIS)
         {
             const float value = js->axes[e->index] * e->axisScale + e->axisOffset;
-            state->axes[i] = _glfw_fminf(_glfw_fmaxf(value, -1.f), 1.f);
+            state->axes[i] = fminf(fmaxf(value, -1.f), 1.f);
         }
         else if (e->type == _GLFW_JOYSTICK_HATBIT)
         {
